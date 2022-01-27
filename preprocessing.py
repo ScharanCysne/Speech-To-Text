@@ -84,7 +84,7 @@ def preprocess(wav_file, debug=False):
 def main():
     counter = 0
     # Pre-process all wav files in WAV_PATH
-    for wav_file in os.listdir(WAV_PATH)[:16]:
+    for wav_file in os.listdir(WAV_PATH):
         f = os.path.join(WAV_PATH, wav_file)
         # checking if it is a file
         if not os.path.isfile(f):
