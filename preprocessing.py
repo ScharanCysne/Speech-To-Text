@@ -22,23 +22,34 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 warnings.filterwarnings("ignore")
 
 WAV_PATH = 'C:\\Users\\nicho\\OneDrive\\Desktop\\Projetos\\Kaggle Datasets\\LJSpeech-1.1\\wavs\\'
+DURATION = 264600
+
+def data_cleaning(samples):
+    pad_width = DURATION - len(samples)
+    if pad_width % 2 == 0:
+        return np.pad(samples, (pad_width/2, pad_width/2), 'constant', constant_values=(0,0))
+    else:
+        return np.pad(samples, (pad_width//2, pad_width//2 + 1), 'constant', constant_values=(0,0))
+
 
 def preprocess(wav_file, debug=False):
     # Load the audio file
     samples, sample_rate = librosa.load(WAV_PATH + wav_file, sr=None)
-    
-    # Generate Simple Spectrogram
+    # Convert to uniform dimensions: sample rate, channels, and duration
+    samples = data_cleaning(samples)
+
+    # Generate Simple Spectrogram with Short-Term Fourier Transform
     spectrogram = librosa.stft(samples)
     # Spectrogram in Mel Scale instead of linear frequency
     spectrogram_mag, _ = librosa.magphase(spectrogram)
     mel_scale_spectrogram = librosa.feature.melspectrogram(S=spectrogram_mag, sr=sample_rate)
     # Decibel Scale to get the final Mel Spectrogram
     mel_spectrogram = librosa.amplitude_to_db(mel_scale_spectrogram, ref=np.min)
-
+    
     # Mel Frequency Cepstral Coefficients
     mfcc = librosa.feature.mfcc(samples, sr=sample_rate)
     # Center MFCC coefficient dimensions to the mean and unit variance
-    sklearn.preprocessing.scale(mfcc, axis=1, copy=False)
+    mfcc = sklearn.preprocessing.scale(mfcc, axis=1)
 
     if debug:
         plt.figure(figsize=(14, 5))
@@ -58,20 +69,22 @@ def preprocess(wav_file, debug=False):
     fig = plt.Figure()
     FigureCanvas(fig)
     ax = fig.add_subplot(111)
+    ax.axis("off") 
     librosa.display.specshow(mel_spectrogram, sr=sample_rate, ax=ax, x_axis='time', y_axis='mel')
-    fig.savefig(f'.\\spectograms\\{wav_file[:-4]}.png')
+    fig.savefig(f'.\\spectograms\\{wav_file[:-4]}.png', bbox_inches='tight', pad_inches=0)
 
     fig = plt.Figure()
     FigureCanvas(fig)
     ax = fig.add_subplot(111)
+    ax.axis("off") 
     librosa.display.specshow(mfcc, sr=sample_rate, ax=ax, x_axis='time')
-    fig.savefig(f'.\\mfcc\\{wav_file[:-4]}.png')
+    fig.savefig(f'.\\mfcc\\{wav_file[:-4]}.png', bbox_inches='tight', pad_inches=0)
 
 
 def main():
     counter = 0
     # Pre-process all wav files in WAV_PATH
-    for wav_file in os.listdir(WAV_PATH):
+    for wav_file in os.listdir(WAV_PATH)[:16]:
         f = os.path.join(WAV_PATH, wav_file)
         # checking if it is a file
         if not os.path.isfile(f):
@@ -79,7 +92,9 @@ def main():
             continue
         preprocess(wav_file, debug=False)
         counter += 1
-        print(f'Preprocessed {counter}th .wav file from {len(os.listdir(WAV_PATH))} files')
+        if counter % 1000 == 0:
+            print(f'Preprocessed {counter}th .wav file from {len(os.listdir(WAV_PATH))} files')
+
 
 if __name__ == '__main__':
     main()
