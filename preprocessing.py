@@ -7,6 +7,12 @@ https://towardsdatascience.com/audio-deep-learning-made-simple-part-3-data-prepa
 https://towardsdatascience.com/audio-deep-learning-made-simple-sound-classification-step-by-step-cebc936bbe5
 https://towardsdatascience.com/audio-deep-learning-made-simple-automatic-speech-recognition-asr-how-it-works-716cfce4c706
 https://towardsdatascience.com/foundations-of-nlp-explained-visually-beam-search-how-it-works-1586b9849a24
+https://towardsdatascience.com/a-guide-to-an-efficient-way-to-build-neural-network-architectures-part-ii-hyper-parameter-42efca01e5d7
+https://distill.pub/2017/ctc/
+https://d2l.ai/index.html
+
+Ideia de TG:
+https://ai.googleblog.com/2019/09/large-scale-multilingual-speech.html
 '''
 
 import os
@@ -14,7 +20,8 @@ import sklearn
 import warnings
 import librosa, librosa.display
 
-import numpy as np
+import numpy  as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
@@ -79,6 +86,25 @@ def preprocess(wav_file, debug=False):
     ax.axis("off") 
     librosa.display.specshow(mfcc, sr=sample_rate, ax=ax, x_axis='time')
     fig.savefig(f'.\\mfcc\\{wav_file[:-4]}.png', bbox_inches='tight', pad_inches=0)
+    
+    # Metadata input and dataset preparation
+    metadata_path = 'C:\\Users\\nicho\\OneDrive\\Desktop\\Projetos\\Kaggle Datasets\\LJSpeech-1.1\\metadata.csv'
+    metadata = pd.read_csv(metadata_path, sep="|", header=None, quoting=3)
+    metadata.columns = ["file_name", "transcription", "normalized_transcription"]
+
+    files = os.listdir('./mfcc')
+    dataset = pd.DataFrame({'file_name':files, 'transcription':[None] * len(files), 'normalized_transcription':[None] * len(files)})
+    dataset['file_name'] = dataset['file_name'].str.replace('.png','')
+    # Extend transcription to all variants
+    dataset['transcription'] = dataset['file_name'].apply(
+        lambda file : metadata[metadata['file_name'] == file[:10]]['transcription'].values[0]
+        )
+    # Extend normalized transcription to all variants
+    dataset['normalized_transcription'] = dataset['file_name'].apply(
+        lambda file : metadata[metadata['file_name'] == file[:10]]['normalized_transcription'].values[0]
+        )
+    # Save dataset.csv to be loaded by model
+    dataset.to_csv('dataset.csv', sep='|')
 
 
 def main():
