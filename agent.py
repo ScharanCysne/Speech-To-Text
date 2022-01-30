@@ -3,41 +3,49 @@
     and then make it narrower and deeper towards the end.
 '''
 
-import os
-import sklearn
-import librosa
-
+import warnings
 import numpy             as np
 import pandas            as pd
 import tensorflow        as tf
 import matplotlib.pyplot as plt
 
-from PIL              import Image
+from NN               import *
 from jiwer            import wer
 from tensorflow       import keras
 from tensorflow.keras import datasets, layers, models
 from sklearn.model_selection import train_test_split
 
-def encode_single_sample(png_file, label):
-    ###########################################
-    ##  Process the MFCC/Spectogram
-    ##########################################
-    # 1. Read png file
-    image = tf.io.read_file("./mfcc/" + png_file + ".png")
-    #image = tf.io.read_file("./spectograms/" + png_file + ".png")
-    image = tf.io.decode_png(image, channels=3)
-    
-    ###########################################
-    ##  Process the label
-    ##########################################
-    # 7. Convert label to Lower case
-    label = tf.strings.lower(label)
-    # 8. Split the label
-    label = tf.strings.unicode_split(label, input_encoding="UTF-8")
-    # 9. Map the characters in label to numbers
-    label = char_to_num(label)
-    # 10. Return a dict as our model is expecting two inputs
-    return image, label
+warnings.filterwarnings("ignore")
+
+# A callback class to output a few transcriptions during training
+class CallbackEval(keras.callbacks.Callback):
+    """Displays a batch of outputs after every epoch."""
+
+    def __init__(self, dataset):
+        super().__init__()
+        self.dataset = dataset
+
+    def on_epoch_end(self, epoch: int, logs=None):
+        predictions = []
+        targets = []
+        for batch in self.dataset:
+            X, y = batch
+            batch_predictions = model.predict(X)
+            batch_predictions = decode_batch_predictions(batch_predictions)
+            predictions.extend(batch_predictions)
+            for label in y:
+                label = (
+                    tf.strings.reduce_join(num_to_char(label)).numpy().decode("utf-8")
+                )
+                targets.append(label)
+        wer_score = wer(targets, predictions)
+        print("-" * 100)
+        print(f"Word Error Rate: {wer_score:.4f}")
+        print("-" * 100)
+        for i in np.random.randint(0, len(predictions), 2):
+            print(f"Target    : {targets[i]}")
+            print(f"Prediction: {predictions[i]}")
+            print("-" * 100)
 
 
 # Read metadata file and parse it
@@ -52,30 +60,22 @@ X_train, X_devtest, y_train, y_devtest = train_test_split(
                                                 test_size=0.02)
 X_dev, X_test, y_dev, y_test = train_test_split(X_devtest, y_devtest, test_size=0.5)
 
-print(f"Size of the training set: {len(X_train)}")
+print(f"\n\nSize of the training set: {len(X_train)}")
 print(f"Size of the dev set: {len(X_dev)}")
-print(f"Size of the test set: {len(X_test)}")
-
-# The set of characters accepted in the transcription.
-characters = [x for x in "abcdefghijklmnopqrstuvwxyz'?! "]
-# Mapping characters to integers
-char_to_num = keras.layers.StringLookup(vocabulary=characters, oov_token="")
-# Mapping integers back to original characters
-num_to_char = keras.layers.StringLookup(
-    vocabulary=char_to_num.get_vocabulary(), oov_token="", invert=True
-)
+print(f"Size of the test set: {len(X_test)}\n\n")
 
 print(
-    f"The vocabulary is: {char_to_num.get_vocabulary()} "
+    f"\nThe vocabulary is: {char_to_num.get_vocabulary()} "
     f"(size = {char_to_num.vocabulary_size()})"
 )
 
 # Creating tf.Dataset object
-batch_size = 32
+batch_size = 12
 
 # Define the trainig dataset
 train_dataset = tf.data.Dataset.from_tensor_slices((list(X_train), list(y_train)))
 train_dataset = (
+    
     train_dataset.map(encode_single_sample, num_parallel_calls=tf.data.AUTOTUNE)
     .padded_batch(batch_size)
     .prefetch(buffer_size=tf.data.AUTOTUNE)
@@ -95,4 +95,28 @@ test_dataset = (
     test_dataset.map(encode_single_sample, num_parallel_calls=tf.data.AUTOTUNE)
     .padded_batch(batch_size)
     .prefetch(buffer_size=tf.data.AUTOTUNE)
+)
+
+print(train_dataset)
+print(development_dataset)
+print(test_dataset)
+
+# Create model
+model = NN.build_model(
+    input_dim = (496, 369, 3),
+    output_dim = char_to_num.vocabulary_size(),
+    rnn_units = 512,
+)
+model.summary(line_length=110)
+
+# Define the number of epochs.
+epochs = 1
+# Callback function to check transcription on the val set.
+validation_callback = CallbackEval(development_dataset)
+# Train the model
+history = model.fit(
+    train_dataset,
+    validation_data=development_dataset,
+    epochs=epochs,
+    callbacks=[validation_callback],
 )
