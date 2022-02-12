@@ -27,30 +27,29 @@ def decode_batch_predictions(pred):
     return output_text
 
 
-def encode_single_sample(png_file, label):
+def encode_single_sample(image):
     ###########################################
     ##  Process the MFCC/Spectogram
     ##########################################
     # 1. Read png file
-    image = tf.io.read_file("./mfcc/" + png_file + ".png")
-    #image = tf.io.read_file("./spectograms/" + png_file + ".png")
-    image = tf.io.decode_png(image, channels=3)
+    #image = tf.io.read_file("./mfcc/" + image)
+    #image = tf.io.decode_png(image, channels=3)
     # 2. normalisation
     image = tf.cast(image, tf.float32)
     means = tf.math.reduce_mean(image/1., 1, keepdims=True)
     stddevs = tf.math.reduce_std(image/1., 1, keepdims=True)
-    image = (image - means) / (stddevs)
+    image = (image - means) / (stddevs + 1e-8)
     ###########################################
     ##  Process the label
     ##########################################
     # 7. Convert label to Lower case
-    label = tf.strings.lower(label)
+    #label = tf.strings.lower(label)
     # 8. Split the label
-    label = tf.strings.unicode_split(label, input_encoding="UTF-8")
+    #label = tf.strings.unicode_split(label, input_encoding="UTF-8")
     # 9. Map the characters in label to numbers
-    label = char_to_num(label)
+    #label = char_to_num(label)
     # 10. Return a dict as our model is expecting two inputs
-    return image, label
+    return image#, label
 
 
 class NN():
@@ -81,8 +80,9 @@ class NN():
         )(x)
         x = layers.BatchNormalization(name="conv_2_bn")(x)
         x = layers.ReLU(name="conv_2_relu")(x)
+        print(x)
         # Reshape the resulted volume to feed the RNNs layers
-        x = layers.Reshape((-1, x.shape[-3] * x.shape[-2] * x.shape[-1]))(x)
+        x = layers.Reshape((-1, x.shape[-2] * x.shape[-1]))(x)
         # RNN layers
         for i in range(1, rnn_layers + 1):
             recurrent = layers.GRU(
